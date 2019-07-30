@@ -20,14 +20,6 @@ require("./db/config")(url);
 // Inititalize api routes
 require("./routes")(app);
 
-//Error handling
-app.use((err, req, res, next) => {
-    if (process.env.NODE_ENV === 'production') {
-        return res.status(500).send(`Internal error.`);
-    }
-    res.status(500).send(err.stack);
-})
-
 // initialize express server
 app.listen(PORT);
 console.log("server listening on port ", PORT);

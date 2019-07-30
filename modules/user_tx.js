@@ -1,13 +1,24 @@
 const Web3 = require('web3');
-let rpcURL = process.env.kovanTestnetEndpoint;
+const rpcURL = process.env.kovanTestnetEndpoint;
 const web3 = new Web3(rpcURL)
-let ObjectId = require("mongodb").ObjectID;
+const ObjectId = require("mongodb").ObjectID;
 
 exports.getUserTransactions = async function (address, pageOptions) {
     // Get user transactions
+    const db = mongo.db(process.env.DB_NAME);
+    let result = await db.collection('transactions')
+        .find({
+            "$or": [
+                { "from": address },
+                { "to": address },
+            ]
+        })
+        .sort({ 'blockNumber': -1 })
+        .skip(pageOptions.limit * (pageOptions.page - 1))
+        .limit(pageOptions.limit)
+        .toArray();
 
-    // pseudocode -
-    // sort by block number -1 and get tx by $or [from, to];
+
     return result;
 }
 
@@ -15,7 +26,7 @@ exports.storeRecentBlocks = async function () {
     try {
         let latest = await web3.eth.getBlockNumber();
         // create mongo db instance
-        let db = mongo.db('tx_history');
+        const db = mongo.db(process.env.DB_NAME);
 
         //get last stored block number from mongodb
         let result = await db.collection('blocks').find({}).sort({ "number": -1 }).limit(1).toArray();
@@ -46,7 +57,7 @@ let saveTransactions = function (db, blockNumber) {
             // create an entry of block
             let blockId = (await db.collection('blocks').insertOne(block, { safe: true })).insertedId;
 
-            //TODO: Need to add a logic to maintain 10,000 recent blocks 
+            //TODO: Need to add a logic to maintain only 10,000 recent blocks 
             // in mongo
 
             // save transactions of that block

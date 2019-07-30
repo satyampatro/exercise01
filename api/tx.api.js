@@ -9,7 +9,8 @@ module.exports = function (router) {
             let pageNumber = req.body.pageNumber;
             let pageOptions = {
                 page: parseInt(pageNumber),
-                limit: parseInt(pageSize)
+                limit: parseInt(pageSize),
+                count: 10000
             }
 
             let transactions = await transactionsModule.getUserTransactions(userAddress, pageOptions);
@@ -19,6 +20,7 @@ module.exports = function (router) {
                 pagination: pageOptions
             })
         } catch (e) {
+            console.error(e.stack);
             res.status(500).send(e.stack)
         }
     });
