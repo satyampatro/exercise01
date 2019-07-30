@@ -22,6 +22,73 @@ exports.getUserTransactions = async function (address, pageOptions) {
     return result;
 }
 
+let saveTransactions = function (db, blockNumber) {
+    return new Promise(async (resolve, reject) => {
+        try {
+            // get block from block number
+            let block = await web3.eth.getBlock(blockNumber);
+
+            // create an entry of block
+            let blockId = (await db.collection('blocks').insertOne(block, { safe: true })).insertedId;
+
+            // save transactions of that block
+            block.transactions.forEach(async tx => {
+                try {
+                    let txData = await web3.eth.getTransactionReceipt(tx);
+                    let objToSave = {
+                        blockId: ObjectId(blockId),
+                        from: txData.from,
+                        to: txData.to,
+                        blockNumber: txData.blockNumber,
+                        transactionHash: txData.transactionHash
+                    }
+
+                    // creating an entry of transaction
+                    await db.collection('transactions').insertOne(objToSave, { safe: true })
+                } catch (e) {
+                    reject(e);
+                    return;
+                }
+            });
+            resolve();
+        } catch (e) {
+            reject(e);
+        }
+    })
+}
+
+let deleteOldRecords = function () {
+    return new Promise(async (resolve, reject) => {
+        try {
+            // Db instance
+            const db = mongo.db(process.env.DB_NAME);
+
+            // Push ids of block to remove
+            let result = await db.collection('blocks').find({}, { _id: 1 })
+                .sort({ number: -1 })
+                .skip(100)
+                .toArray()
+
+            let removeBlockIdsArray = result.map(function (doc) { return doc._id; });
+
+            // Remove blocks
+            await db.collection('blocks').deleteMany({ "_id": { "$in": removeBlockIdsArray } });
+
+            // Remove transactions of those blocks
+            removeBlockIdsArray.forEach((blockId) => {
+                db.collection('transactions').deleteOne({ blockId: blockId }).catch((e) => {
+                    console.error(e);
+                })
+            })
+
+            resolve();
+        } catch (e) {
+            reject(e);
+        }
+    })
+}
+
+
 exports.storeRecentBlocks = async function () {
     try {
         let latest = await web3.eth.getBlockNumber();
@@ -32,52 +99,21 @@ exports.storeRecentBlocks = async function () {
         let result = await db.collection('blocks').find({}).sort({ "number": -1 }).limit(1).toArray();
         let lastStoredBlock = result.length > 0 ? result[0].number : 0;
 
-        console.debug("start", new Date());
+
+        let saveTxPromises = [];
         for (let i = 0; i < 10000; i++) {
             let block = latest - i;
             if (block > lastStoredBlock) {
-                console.log(block, lastStoredBlock, block > lastStoredBlock)
-                saveTransactions(db, block).catch((e) => { throw e });
+                saveTxPromises.push(saveTransactions(db, block));
             }
         }
-        console.debug("end", new Date());
+        // execute all in async
+        await Promise.all(saveTxPromises);
+
+        // Clean up old records to maintain 10,000 recent blocks
+        deleteOldRecords().catch((e) => { console.error(e) });
         return;
     } catch (e) {
         throw e;
     }
-}
-
-
-let saveTransactions = function (db, blockNumber) {
-    return new Promise(async (resolve, reject) => {
-        try {
-            // get block from block number
-            let block = await web3.eth.getBlock(blockNumber);
-
-            // create an entry of block
-            let blockId = (await db.collection('blocks').insertOne(block, { safe: true })).insertedId;
-
-            //TODO: Need to add a logic to maintain only 10,000 recent blocks 
-            // in mongo
-
-            // save transactions of that block
-            block.transactions.forEach(async tx => {
-                let txData = await web3.eth.getTransactionReceipt(tx);
-                let objToSave = {
-                    blockId: ObjectId(blockId),
-                    from: txData.from,
-                    to: txData.to,
-                    blockNumber: txData.blockNumber,
-                    transactionHash: txData.transactionHash
-                }
-
-                // save in mongodb
-                db.collection('transactions').insertOne(objToSave, { safe: true })
-                    .catch(e => console.error(e))
-            });
-            resolve();
-        } catch (e) {
-            reject(e);
-        }
-    })
 }
