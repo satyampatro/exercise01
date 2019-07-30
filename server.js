@@ -20,6 +20,18 @@ require("./db/config")(url);
 // Inititalize api routes
 require("./routes")(app);
 
+// Job scheduler to sync recent blocks from kovan testnet
+let CronJob = require('cron').CronJob;
+
+// runs every minute
+let txModule = require('./modules/user_tx')
+new CronJob('00 * * * * *', function () {
+    txModule.storeRecentBlocks().catch((e) => {
+        console.error(e);
+    })
+}, null, true, 'Asia/Kolkata');
+
+
 // initialize express server
 app.listen(PORT);
 console.log("server listening on port ", PORT);

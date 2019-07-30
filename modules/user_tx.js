@@ -1,6 +1,6 @@
 const Web3 = require('web3');
 const rpcURL = process.env.kovanTestnetEndpoint;
-const web3 = new Web3(rpcURL)
+const web3 = new Web3(new Web3.providers.HttpProvider(rpcURL))
 const ObjectId = require("mongodb").ObjectID;
 
 exports.getUserTransactions = async function (address, pageOptions) {
@@ -46,12 +46,14 @@ let saveTransactions = function (db, blockNumber) {
                     // creating an entry of transaction
                     await db.collection('transactions').insertOne(objToSave, { safe: true })
                 } catch (e) {
+                    console.error("hit2", e)
                     reject(e);
                     return;
                 }
             });
             resolve();
         } catch (e) {
+            console.error("hit1", e)
             reject(e);
         }
     })
@@ -66,7 +68,7 @@ let deleteOldRecords = function () {
             // Push ids of block to remove
             let result = await db.collection('blocks').find({}, { _id: 1 })
                 .sort({ number: -1 })
-                .skip(100)
+                .skip(10000)
                 .toArray()
 
             let removeBlockIdsArray = result.map(function (doc) { return doc._id; });
@@ -83,6 +85,7 @@ let deleteOldRecords = function () {
 
             resolve();
         } catch (e) {
+            console.error("hit3", e)
             reject(e);
         }
     })
@@ -91,6 +94,7 @@ let deleteOldRecords = function () {
 
 exports.storeRecentBlocks = async function () {
     try {
+        console.debug("Storing blocks...");
         let latest = await web3.eth.getBlockNumber();
         // create mongo db instance
         const db = mongo.db(process.env.DB_NAME);
@@ -114,6 +118,7 @@ exports.storeRecentBlocks = async function () {
         deleteOldRecords().catch((e) => { console.error(e) });
         return;
     } catch (e) {
+        console.error("hit4", e)
         throw e;
     }
 }
