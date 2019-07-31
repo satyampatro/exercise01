@@ -1,5 +1,5 @@
 const Web3 = require('web3');
-const rpcURL = process.env.kovanTestnetEndpoint;
+const rpcURL = process.env.KOVAN_TESTNET_ENDPOINT;
 const web3 = new Web3(new Web3.providers.HttpProvider(rpcURL))
 const ObjectId = require("mongodb").ObjectID;
 
@@ -29,6 +29,10 @@ let saveTransactions = function (db, blockNumber) {
             let block = await web3.eth.getBlock(blockNumber);
 
             // create an entry of block
+            if (!block) {
+                resolve(false);
+                return
+            }
             let blockId = (await db.collection('blocks').insertOne(block, { safe: true })).insertedId;
 
             // save transactions of that block
@@ -46,14 +50,14 @@ let saveTransactions = function (db, blockNumber) {
                     // creating an entry of transaction
                     await db.collection('transactions').insertOne(objToSave, { safe: true })
                 } catch (e) {
-                    console.error("hit2", e)
+                    console.error(e)
                     reject(e);
                     return;
                 }
             });
-            resolve();
+            resolve(true);
         } catch (e) {
-            console.error("hit1", e)
+            console.error("Save transaction", blockNumber, e)
             reject(e);
         }
     })
@@ -85,7 +89,6 @@ let deleteOldRecords = function () {
 
             resolve();
         } catch (e) {
-            console.error("hit3", e)
             reject(e);
         }
     })
@@ -104,21 +107,24 @@ exports.storeRecentBlocks = async function () {
         let lastStoredBlock = result.length > 0 ? result[0].number : 0;
 
 
-        let saveTxPromises = [];
+        // let saveTxPromises = [];
+        let chunkPromises = [];
         for (let i = 0; i < 10000; i++) {
             let block = latest - i;
             if (block > lastStoredBlock) {
-                saveTxPromises.push(saveTransactions(db, block));
+                if (chunkPromises.length > 100) {
+                    await Promise.all(chunkPromises);
+                    chunkPromises = [];
+                }
+                chunkPromises.push(saveTransactions(db, block));
             }
         }
-        // execute all in async
-        await Promise.all(saveTxPromises);
 
         // Clean up old records to maintain 10,000 recent blocks
         deleteOldRecords().catch((e) => { console.error(e) });
         return;
     } catch (e) {
-        console.error("hit4", e)
+        console.error(e)
         throw e;
     }
 }
